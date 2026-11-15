@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="620" viewBox="0 0 760 620" role="img" aria-label="Part 2 sharded cluster architecture with replica sets and analytics collections">
+  <defs>
+    <style>
+      .title { font: 700 15px 'Liberation Sans', Arial, sans-serif; fill: #14324F; }
+      .cap { font: 400 10px 'Liberation Sans', Arial, sans-serif; fill: #3D4A57; }
+      .h { font: 700 11px 'Liberation Sans', Arial, sans-serif; fill: #FFFFFF; }
+      .h2 { font: 700 11px 'Liberation Sans', Arial, sans-serif; fill: #14324F; }
+      .t { font: 400 10px 'Liberation Sans', Arial, sans-serif; fill: #1A2430; }
+      .tm { font: 400 9.5px 'DejaVu Sans Mono', 'Liberation Mono', monospace; fill: #1A2430; }
+      .s { font: 600 9px 'Liberation Sans', Arial, sans-serif; fill: #FFFFFF; }
+      .lbl { font: 600 9.5px 'Liberation Sans', Arial, sans-serif; fill: #1B4F72; }
+      .muted { font: 400 9px 'Liberation Sans', Arial, sans-serif; fill: #5B6773; }
+    </style>
+    <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#1B4F72"/>
+    </marker>
+    <marker id="arrowG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#3D6B1E"/>
+    </marker>
+  </defs>
+  <rect width="760" height="620" fill="#F6F8FB"/>
+  <text x="24" y="24" class="title">Part 2 — Refactored cluster: sharding, replication, pre-aggregation</text>
+  <text x="24" y="42" class="cap">Operational writes go to primaries with majority write concern. Analytics read pre-aggregated collections from secondaries (eventual consistency).</text>
+
+  <!-- Clients -->
+  <rect x="250" y="54" width="260" height="32" rx="4" fill="#14324F"/>
+  <text x="380" y="75" class="h" text-anchor="middle">Clients / application drivers</text>
+
+  <line x1="380" y1="86" x2="380" y2="104" stroke="#1B4F72" stroke-width="1.4" marker-end="url(#arrow2)"/>
+
+  <!-- mongos -->
+  <rect x="175" y="106" width="410" height="36" rx="4" fill="#1B4F72"/>
+  <text x="380" y="123" class="h" text-anchor="middle">mongos  (query routers)</text>
+  <text x="380" y="136" class="s" text-anchor="middle" fill="#D6E4F0">scatter-gather only when the shard key is not in the query</text>
+
+  <!-- lines down to shards and config -->
+  <line x1="380" y1="142" x2="380" y2="158" stroke="#1B4F72" stroke-width="1.4"/>
+  <line x1="130" y1="158" x2="630" y2="158" stroke="#1B4F72" stroke-width="1.4"/>
+  <line x1="130" y1="158" x2="130" y2="174" stroke="#1B4F72" stroke-width="1.4" marker-end="url(#arrow2)"/>
+  <line x1="380" y1="158" x2="380" y2="174" stroke="#1B4F72" stroke-width="1.4" marker-end="url(#arrow2)"/>
+  <line x1="630" y1="158" x2="630" y2="174" stroke="#1B4F72" stroke-width="1.4" marker-end="url(#arrow2)"/>
+
+  <!-- Shard 0 -->
+  <g>
+    <rect x="24" y="176" width="212" height="228" rx="5" fill="#FFFFFF" stroke="#1B4F72" stroke-width="1.3"/>
+    <rect x="24" y="176" width="212" height="26" rx="5" fill="#0F5C5C"/>
+    <rect x="24" y="192" width="212" height="10" fill="#0F5C5C"/>
+    <text x="130" y="194" class="h" text-anchor="middle">Shard 0  ·  replica set</text>
+    <!-- Primary -->
+    <rect x="38" y="214" width="184" height="28" rx="3" fill="#14324F"/>
+    <text x="130" y="232" class="h" text-anchor="middle">PRIMARY  (writes)</text>
+    <!-- Secondaries -->
+    <rect x="38" y="248" width="184" height="24" rx="3" fill="#4A6F8A"/>
+    <text x="130" y="264" class="h" text-anchor="middle">SECONDARY</text>
+    <rect x="38" y="276" width="184" height="24" rx="3" fill="#4A6F8A"/>
+    <text x="130" y="292" class="h" text-anchor="middle">SECONDARY  (analytics reads)</text>
+    <text x="38" y="318" class="tm">orders     shard key: hashed userId</text>
+    <text x="38" y="334" class="tm">products   shard key: hashed _id</text>
+    <text x="38" y="354" class="t">3-node RS (P + 2 S)</text>
+    <text x="38" y="370" class="t">Optional: multi-region S</text>
+    <text x="38" y="386" class="muted">Automatic failover if primary is lost</text>
+  </g>
+
+  <!-- Shard 1 -->
+  <g>
+    <rect x="274" y="176" width="212" height="228" rx="5" fill="#FFFFFF" stroke="#1B4F72" stroke-width="1.3"/>
+    <rect x="274" y="176" width="212" height="26" rx="5" fill="#0F5C5C"/>
+    <rect x="274" y="192" width="212" height="10" fill="#0F5C5C"/>
+    <text x="380" y="194" class="h" text-anchor="middle">Shard 1  ·  replica set</text>
+    <rect x="288" y="214" width="184" height="28" rx="3" fill="#14324F"/>
+    <text x="380" y="232" class="h" text-anchor="middle">PRIMARY  (writes)</text>
+    <rect x="288" y="248" width="184" height="24" rx="3" fill="#4A6F8A"/>
+    <text x="380" y="264" class="h" text-anchor="middle">SECONDARY</text>
+    <rect x="288" y="276" width="184" height="24" rx="3" fill="#4A6F8A"/>
+    <text x="380" y="292" class="h" text-anchor="middle">SECONDARY  (analytics reads)</text>
+    <text x="288" y="318" class="tm">orders     shard key: hashed userId</text>
+    <text x="288" y="334" class="tm">products   shard key: hashed _id</text>
+    <text x="288" y="354" class="t">Same replica-set pattern</text>
+    <text x="288" y="370" class="t">Add shards as TPS grows</text>
+    <text x="288" y="386" class="muted">userId hash keeps a user’s orders local</text>
+  </g>
+
+  <!-- Config RS -->
+  <g>
+    <rect x="524" y="176" width="212" height="228" rx="5" fill="#FFFFFF" stroke="#5A6570" stroke-width="1.3"/>
+    <rect x="524" y="176" width="212" height="26" rx="5" fill="#5A6570"/>
+    <rect x="524" y="192" width="212" height="10" fill="#5A6570"/>
+    <text x="630" y="194" class="h" text-anchor="middle">Config servers  ·  CSRS</text>
+    <rect x="538" y="214" width="184" height="28" rx="3" fill="#5A6570"/>
+    <text x="630" y="232" class="h" text-anchor="middle">PRIMARY</text>
+    <rect x="538" y="248" width="184" height="24" rx="3" fill="#8A93A0"/>
+    <text x="630" y="264" class="h" text-anchor="middle">SECONDARY</text>
+    <rect x="538" y="276" width="184" height="24" rx="3" fill="#8A93A0"/>
+    <text x="630" y="292" class="h" text-anchor="middle">SECONDARY</text>
+    <text x="538" y="318" class="t">Stores cluster metadata</text>
+    <text x="538" y="334" class="t">and chunk distribution.</text>
+    <text x="538" y="354" class="t">Not used for application data.</text>
+    <text x="538" y="386" class="muted">Required for a sharded cluster</text>
+  </g>
+
+  <!-- Change streams arrow -->
+  <line x1="380" y1="404" x2="380" y2="428" stroke="#3D6B1E" stroke-width="1.5" marker-end="url(#arrowG)"/>
+  <text x="392" y="422" class="lbl">change streams / aggregation pipelines</text>
+
+  <!-- Analytics layer -->
+  <rect x="24" y="432" width="712" height="168" rx="5" fill="#FFFFFF" stroke="#3D6B1E" stroke-width="1.3"/>
+  <rect x="24" y="432" width="712" height="26" rx="5" fill="#3D6B1E"/>
+  <rect x="24" y="448" width="712" height="10" fill="#3D6B1E"/>
+  <text x="380" y="450" class="h" text-anchor="middle">Analytics layer  ·  denormalized, pre-aggregated collections</text>
+
+  <!-- daily_sales -->
+  <rect x="40" y="470" width="330" height="114" rx="4" fill="#F3F8EE" stroke="#C3D6B0"/>
+  <text x="52" y="490" class="h2">daily_sales</text>
+  <text x="52" y="508" class="tm">_id: { date, productId }</text>
+  <text x="52" y="524" class="tm">unitsSold, revenue, orderCount</text>
+  <text x="52" y="540" class="tm">idx: { date: 1 }   { productId: 1, date: -1 }</text>
+  <text x="52" y="568" class="t">Trend and sales queries by day / product</text>
+
+  <!-- product_stats -->
+  <rect x="390" y="470" width="330" height="114" rx="4" fill="#F3F8EE" stroke="#C3D6B0"/>
+  <text x="402" y="490" class="h2">product_stats</text>
+  <text x="402" y="508" class="tm">_id: productId</text>
+  <text x="402" y="524" class="tm">views, unitsSold, revenue, rating</text>
+  <text x="402" y="540" class="tm">updatedAt    idx: { unitsSold: -1 }</text>
+  <text x="402" y="568" class="t">Leaderboards and catalog badges (eventual)</text>
+</svg>

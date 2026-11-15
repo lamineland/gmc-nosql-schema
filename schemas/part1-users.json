@@ -1,0 +1,20 @@
+{
+  "_id": "u_8f21",
+  "email": "aminata.diop@example.com",
+  "passwordHash": "$2b$10$examplehash",
+  "profile": {
+    "firstName": "Aminata",
+    "lastName": "Diop",
+    "phone": "+221770000000"
+  },
+  "addresses": [
+    {
+      "label": "home",
+      "street": "Rue 10, Médina",
+      "city": "Dakar",
+      "country": "SN",
+      "isDefault": true
+    }
+  ],
+  "createdAt": "2026-11-01T10:14:00Z"
+}

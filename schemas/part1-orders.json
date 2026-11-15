@@ -1,0 +1,42 @@
+{
+  "_id": "o_9c40",
+  "userId": "u_8f21",
+  "customer": {
+    "userId": "u_8f21",
+    "email": "aminata.diop@example.com",
+    "name": "Aminata Diop",
+    "shippingAddress": {
+      "street": "Rue 10, Médina",
+      "city": "Dakar",
+      "country": "SN"
+    }
+  },
+  "items": [
+    {
+      "productId": "p_shoe001",
+      "sku": "SHOE-001",
+      "name": "Running Sneakers",
+      "unitPrice": 45000,
+      "qty": 1,
+      "subtotal": 45000
+    }
+  ],
+  "totals": {
+    "subtotal": 45000,
+    "shipping": 2000,
+    "total": 47000,
+    "currency": "XOF"
+  },
+  "status": "paid",
+  "statusHistory": [
+    {
+      "status": "created",
+      "at": "2026-11-15T07:02:11Z"
+    },
+    {
+      "status": "paid",
+      "at": "2026-11-15T07:02:18Z"
+    }
+  ],
+  "createdAt": "2026-11-15T07:02:11Z"
+}

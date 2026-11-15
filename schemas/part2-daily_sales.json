@@ -1,0 +1,10 @@
+{
+  "_id": {
+    "date": "2026-11-15",
+    "productId": "p_shoe001"
+  },
+  "unitsSold": 86,
+  "revenue": 3870000,
+  "orderCount": 79,
+  "currency": "XOF"
+}

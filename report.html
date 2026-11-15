@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>NoSQL E-commerce Schema Design</title>
+<style>
+  @page {
+    size: A4;
+    margin: 11mm 12.5mm 12mm 12.5mm;
+  }
+  * { box-sizing: border-box; }
+  html { font-size: 10pt; }
+  body {
+    font-family: "Liberation Sans", "DejaVu Sans", "Noto Sans", Arial, sans-serif;
+    color: #1A2430;
+    line-height: 1.4;
+    margin: 0;
+    padding: 0;
+  }
+  .kicker {
+    font-size: 8pt;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #0F5C5C;
+    font-weight: 700;
+    margin: 0 0 2pt;
+  }
+  h1 {
+    font-size: 18pt;
+    color: #14324F;
+    margin: 0 0 1pt;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+  }
+  .subtitle {
+    font-size: 10.5pt;
+    color: #5B6773;
+    margin: 0 0 7pt;
+  }
+  .meta {
+    font-size: 9.5pt;
+    background: #F6F8FB;
+    border: 1px solid #D5DCE3;
+    border-left: 4px solid #14324F;
+    padding: 6pt 9pt;
+    margin: 0 0 8pt;
+  }
+  .meta strong { color: #14324F; }
+  h2 {
+    font-size: 12.5pt;
+    color: #14324F;
+    border-bottom: 2px solid #14324F;
+    padding-bottom: 2pt;
+    margin: 10pt 0 6pt;
+    page-break-after: avoid;
+  }
+  h3 {
+    font-size: 10.5pt;
+    color: #0F5C5C;
+    margin: 8pt 0 4pt;
+    page-break-after: avoid;
+  }
+  p { margin: 0 0 5.5pt; }
+  ul { margin: 0 0 6pt; padding-left: 16pt; }
+  li { margin: 0 0 2pt; }
+  .diagram {
+    page-break-inside: avoid;
+    margin: 3pt 0 6pt;
+    border: 1px solid #D5DCE3;
+    background: #F6F8FB;
+  }
+  .diagram svg { display: block; width: 100%; height: auto; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8pt;
+    margin: 2pt 0 7pt;
+    page-break-inside: avoid;
+  }
+  th {
+    background: #14324F;
+    color: #fff;
+    text-align: left;
+    padding: 3.5pt 5.5pt;
+    font-weight: 600;
+  }
+  td {
+    border-bottom: 1px solid #D5DCE3;
+    padding: 3pt 5.5pt;
+    vertical-align: top;
+  }
+  tr:nth-child(even) td { background: #F6F8FB; }
+  code, pre {
+    font-family: "DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono", monospace;
+  }
+  .docs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6pt;
+    margin: 0 0 6pt;
+    page-break-inside: avoid;
+  }
+  .docs.wide { grid-template-columns: 1fr; }
+  .doc {
+    background: #F3F5F8;
+    border: 1px solid #D5DCE3;
+    border-left: 3px solid #0F5C5C;
+    padding: 5pt 7pt 6pt;
+  }
+  .doc.rust { border-left-color: #8A3B12; }
+  .doc.green { border-left-color: #3D6B1E; }
+  .doc h4 {
+    margin: 0 0 3pt;
+    font-size: 8.5pt;
+    color: #14324F;
+    font-family: "Liberation Sans", "DejaVu Sans", Arial, sans-serif;
+    font-weight: 700;
+  }
+  pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 7.2pt;
+    line-height: 1.38;
+    color: #1A2430;
+  }
+  .callout {
+    background: #F3F8EE;
+    border-left: 3px solid #3D6B1E;
+    padding: 5.5pt 8pt;
+    margin: 3pt 0 7pt;
+    font-size: 8.8pt;
+    page-break-inside: avoid;
+  }
+  .callout.warn {
+    background: #FFF7EE;
+    border-left-color: #8A3B12;
+  }
+  .part2 { page-break-before: always; page-break-inside: auto; }
+  .wc { font-size: 8pt; color: #5B6773; font-weight: 400; }
+  .reflection { page-break-inside: auto; }
+  .reflection p { orphans: 2; widows: 2; }
+</style>
+</head>
+<body>
+
+<p class="kicker">GoMyCode checkpoint · NoSQL database design</p>
+<h1>E-commerce NoSQL Schema Design</h1>
+<p class="subtitle">Initial document model, then a sharded, highly available refactor for analytics</p>
+
+<p>This design uses a <strong>MongoDB document model</strong>. Products and orders have nested, variable structure; a single order document can hold the customer snapshot, line items, and status history, so a status change is one atomic write even at thousands of transactions per second. Text indexes cover catalog search. The three key entities are <strong>users</strong>, <strong>products</strong>, and <strong>orders</strong>.</p>
+
+<h2>Part 1 — Initial schema design</h2>
+
+<h3>Model, entities, and relationships</h3>
+<ul>
+  <li><strong>users</strong> hold profile and address data. An order stores <code>userId</code> as a reference (one user, many orders).</li>
+  <li><strong>products</strong> are the browsable catalog. Frequent lookups and full-text search drive the index choices below.</li>
+  <li><strong>orders</strong> embed a <em>customer snapshot</em> and <em>item snapshots</em> (name, SKU, unit price at purchase). Receipts stay correct if a profile or catalog price later changes. <code>items.productId</code> remains a reference for inventory and links, but rendering an order does not join live product documents.</li>
+  <li><strong>status</strong> and <strong>statusHistory</strong> live on the same order document so delivery-status updates are atomic.</li>
+</ul>
+
+<div class="diagram"><svg xmlns="http://www.w3.org/2000/svg" width="100%" height="auto" preserveAspectRatio="xMidYMid meet" viewBox="0 0 760 520" role="img" aria-label="Part 1 initial MongoDB document schema">
+  <defs>
+    <style>
+      .title { font: 700 15px 'Liberation Sans', Arial, sans-serif; fill: #14324F; }
+      .coll { font: 700 12.5px 'Liberation Sans', Arial, sans-serif; fill: #FFFFFF; }
+      .field { font: 400 11px 'DejaVu Sans Mono', 'Liberation Mono', monospace; fill: #1A2430; }
+      .muted { font: 400 10px 'Liberation Sans', Arial, sans-serif; fill: #5B6773; }
+      .idx { font: 600 9.5px 'DejaVu Sans Mono', 'Liberation Mono', monospace; fill: #0F4F4F; }
+      .lbl { font: 600 9.5px 'Liberation Sans', Arial, sans-serif; fill: #1B4F72; }
+      .emb { font: 700 10px 'Liberation Sans', Arial, sans-serif; fill: #14324F; }
+      .cap { font: 400 10px 'Liberation Sans', Arial, sans-serif; fill: #3D4A57; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#1B4F72"/>
+    </marker>
+  </defs>
+  <rect width="760" height="520" fill="#F6F8FB"/>
+  <text x="24" y="26" class="title">Part 1 — Initial document schema (MongoDB)</text>
+  <text x="24" y="44" class="cap">References for live links; embedded snapshots so receipts stay historically accurate. Status updates are single-document and atomic.</text>
+
+  <!-- USERS -->
+  <g>
+    <rect x="24" y="62" width="220" height="28" rx="4" fill="#14324F"/>
+    <text x="134" y="81" class="coll" text-anchor="middle">users</text>
+    <rect x="24" y="90" width="220" height="168" rx="0" fill="#FFFFFF" stroke="#C9D3DE"/>
+    <text x="36" y="112" class="field">_id: ObjectId</text>
+    <text x="36" y="130" class="field">email: string  (unique)</text>
+    <text x="36" y="148" class="field">passwordHash: string</text>
+    <text x="36" y="166" class="field">profile { firstName, lastName,</text>
+    <text x="50" y="182" class="field">phone }</text>
+    <text x="36" y="200" class="field">addresses[ ] { label, street,</text>
+    <text x="50" y="216" class="field">city, country, isDefault }</text>
+    <text x="36" y="236" class="field">createdAt: date</text>
+    <rect x="24" y="258" width="220" height="46" fill="#E8F3F3" stroke="#C9D3DE"/>
+    <text x="36" y="276" class="idx">idx: { email: 1 } unique</text>
+    <text x="36" y="292" class="idx">idx: { "addresses.city": 1 }</text>
+  </g>
+
+  <!-- PRODUCTS -->
+  <g>
+    <rect x="270" y="62" width="220" height="28" rx="4" fill="#0F5C5C"/>
+    <text x="380" y="81" class="coll" text-anchor="middle">products</text>
+    <rect x="270" y="90" width="220" height="168" fill="#FFFFFF" stroke="#C9D3DE"/>
+    <text x="282" y="112" class="field">_id: ObjectId</text>
+    <text x="282" y="130" class="field">sku: string  (unique)</text>
+    <text x="282" y="148" class="field">name, description, tags[ ]</text>
+    <text x="282" y="166" class="field">category: string</text>
+    <text x="282" y="184" class="field">price, currency, stock</text>
+    <text x="282" y="202" class="field">rating, images[ ]</text>
+    <text x="282" y="220" class="field">createdAt: date</text>
+    <text x="282" y="242" class="muted">Catalog: fast lookup + text search</text>
+    <rect x="270" y="258" width="220" height="46" fill="#E8F3F3" stroke="#C9D3DE"/>
+    <text x="282" y="276" class="idx">idx: text(name, description, tags)</text>
+    <text x="282" y="292" class="idx">idx: { category: 1, price: 1 }</text>
+  </g>
+
+  <!-- ORDERS -->
+  <g>
+    <rect x="516" y="62" width="220" height="28" rx="4" fill="#8A3B12"/>
+    <text x="626" y="81" class="coll" text-anchor="middle">orders</text>
+    <rect x="516" y="90" width="220" height="246" fill="#FFFFFF" stroke="#C9D3DE"/>
+    <text x="528" y="110" class="field">_id: ObjectId</text>
+    <text x="528" y="126" class="field">userId: ObjectId   → users</text>
+    <!-- customer embed -->
+    <rect x="526" y="134" width="200" height="52" rx="3" fill="#FFF4EC" stroke="#E2C4B0"/>
+    <text x="536" y="148" class="emb">customer  (snapshot)</text>
+    <text x="536" y="164" class="field">userId, email, name,</text>
+    <text x="536" y="178" class="field">shippingAddress { … }</text>
+    <!-- items embed -->
+    <rect x="526" y="190" width="200" height="52" rx="3" fill="#FFF4EC" stroke="#E2C4B0"/>
+    <text x="536" y="204" class="emb">items[ ]  (snapshot)</text>
+    <text x="536" y="220" class="field">productId, sku, name,</text>
+    <text x="536" y="234" class="field">unitPrice, qty, subtotal</text>
+    <text x="528" y="258" class="field">totals { subtotal, shipping,</text>
+    <text x="542" y="272" class="field">total, currency }</text>
+    <text x="528" y="290" class="field">status, statusHistory[ ]</text>
+    <text x="528" y="306" class="field">  { status, at }, createdAt</text>
+    <rect x="516" y="336" width="220" height="62" fill="#E8F3F3" stroke="#C9D3DE"/>
+    <text x="528" y="354" class="idx">idx: { userId: 1, createdAt: -1 }</text>
+    <text x="528" y="370" class="idx">idx: { status: 1, createdAt: -1 }</text>
+    <text x="528" y="386" class="idx">writeConcern: majority</text>
+  </g>
+
+  <!-- Arrows: users <-> orders, products <-> orders -->
+  <!-- userId reference: from orders left to users right, bottom path -->
+  <path d="M 516 118 C 430 118, 430 430, 244 430 L 134 430 L 134 304" fill="none" stroke="#1B4F72" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <text x="280" y="422" class="lbl">userId  ·  1 user → N orders  (reference)</text>
+
+  <path d="M 516 220 C 470 220, 470 450, 380 450 L 380 304" fill="none" stroke="#1B4F72" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <text x="280" y="468" class="lbl">items.productId  ·  reference + price/name snapshot</text>
+
+  <text x="24" y="508" class="cap">High write throughput: one atomic update per status change. Catalog reads use the text index and the category+price compound index.</text>
+</svg></div>
+
+<h3>Sample documents</h3>
+<div class="docs">
+  <div class="doc">
+    <h4>users</h4>
+    <pre>{
+  "_id": "u_8f21",
+  "email": "aminata.diop@example.com",
+  "passwordHash": "$2b$10$examplehash",
+  "profile": {
+    "firstName": "Aminata", "lastName": "Diop",
+    "phone": "+221770000000"
+  },
+  "addresses": [{
+    "label": "home", "street": "Rue 10, Médina",
+    "city": "Dakar", "country": "SN", "isDefault": true
+  }],
+  "createdAt": "2026-11-01T10:14:00Z"
+}</pre>
+  </div>
+  <div class="doc">
+    <h4>products</h4>
+    <pre>{
+  "_id": "p_shoe001",
+  "sku": "SHOE-001",
+  "name": "Running Sneakers",
+  "description": "Lightweight road-running shoes",
+  "category": "footwear",
+  "tags": ["running", "sport", "unisex"],
+  "price": 45000,
+  "currency": "XOF",
+  "stock": 120,
+  "rating": 4.5,
+  "images": ["https://cdn.example.com/shoe-001.jpg"],
+  "createdAt": "2026-10-15T08:00:00Z"
+}</pre>
+  </div>
+</div>
+<div class="docs wide">
+  <div class="doc rust">
+    <h4>orders — customer and items are snapshots; status changes are single-document updates</h4>
+    <pre>{
+  "_id": "o_9c40",
+  "userId": "u_8f21",
+  "customer": {
+    "userId": "u_8f21",
+    "email": "aminata.diop@example.com",
+    "name": "Aminata Diop",
+    "shippingAddress": { "street": "Rue 10, Médina", "city": "Dakar", "country": "SN" }
+  },
+  "items": [
+    { "productId": "p_shoe001", "sku": "SHOE-001", "name": "Running Sneakers",
+      "unitPrice": 45000, "qty": 1, "subtotal": 45000 }
+  ],
+  "totals": { "subtotal": 45000, "shipping": 2000, "total": 47000, "currency": "XOF" },
+  "status": "paid",
+  "statusHistory": [
+    { "status": "created", "at": "2026-11-15T07:02:11Z" },
+    { "status": "paid",    "at": "2026-11-15T07:02:18Z" }
+  ],
+  "createdAt": "2026-11-15T07:02:11Z"
+}</pre>
+  </div>
+</div>
+
+<h3>Query patterns and indexes</h3>
+<table>
+  <thead>
+    <tr>
+      <th style="width:28%">Query pattern</th>
+      <th style="width:14%">Collection</th>
+      <th style="width:32%">Index</th>
+      <th>Purpose</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Log in / load account by email</td>
+      <td>users</td>
+      <td><code>{ email: 1 }</code> unique</td>
+      <td>Fast, unique account lookup</td>
+    </tr>
+    <tr>
+      <td>Full-text product search</td>
+      <td>products</td>
+      <td>text index on <code>name</code>, <code>description</code>, <code>tags</code></td>
+      <td>Catalog search at read time</td>
+    </tr>
+    <tr>
+      <td>Browse category and filter by price</td>
+      <td>products</td>
+      <td><code>{ category: 1, price: 1 }</code></td>
+      <td>Equality then range / sort</td>
+    </tr>
+    <tr>
+      <td>SKU lookup</td>
+      <td>products</td>
+      <td><code>{ sku: 1 }</code> unique</td>
+      <td>Inventory and imports</td>
+    </tr>
+    <tr>
+      <td>Customer order history</td>
+      <td>orders</td>
+      <td><code>{ userId: 1, createdAt: -1 }</code></td>
+      <td>Recent orders for one user</td>
+    </tr>
+    <tr>
+      <td>Orders by delivery status</td>
+      <td>orders</td>
+      <td><code>{ status: 1, createdAt: -1 }</code></td>
+      <td>Operations / fulfillment views</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout warn">
+  <strong>Scalability and consistency (Part 1).</strong>
+  High write throughput comes from keeping each checkout and each status transition as a single-document update: no multi-document transaction is required to move an order from <code>created</code> to <code>paid</code> or to append <code>statusHistory</code>.
+  Status writes use <code>writeConcern: "majority"</code> so the new status is acknowledged by a replica-set majority before the client is told it succeeded.
+  The catalog is read-heavy: the text index and the <code>category + price</code> compound index keep browse and search off collection scans.
+  A single replica set is assumed at this stage; horizontal scale is introduced in Part 2.
+</div>
+
+<div class="part2">
+<h2>Part 2 — Refactored schema</h2>
+
+<p>New requirements are large-scale analytical queries on product trends and sales, plus high availability and partition tolerance as traffic grows. The document shapes from Part 1 are kept for operational data. The cluster is refactored with <strong>sharding</strong>, <strong>replication</strong>, and <strong>denormalized pre-aggregates</strong>.</p>
+
+<ul>
+  <li><strong>Sharding.</strong> <code>orders</code> are sharded on a hashed <code>userId</code> so one customer’s history stays on one shard (good for the history index). The alternative, a hashed <code>orderId</code> or <code>_id</code>, spreads writes more evenly if a few buyers dominate traffic, but turns history lookups into scatter-gather. <code>products</code> are sharded on a hashed <code>_id</code> to spread catalog load.</li>
+  <li><strong>Replication.</strong> Each shard is a 3-node replica set (primary + two secondaries), optionally with a multi-region secondary. The primary takes writes. Secondaries provide failover and analytical reads (<code>readPreference: "secondary"</code>). Config servers have their own replica set. Applications connect through <code>mongos</code>.</li>
+  <li><strong>Denormalization.</strong> <code>daily_sales</code> and <code>product_stats</code> store pre-aggregated metrics so trend queries do not scan raw orders. They are maintained by change streams and aggregation pipelines, not by the checkout write path. Analytics can also run on a dedicated analytical node.</li>
+</ul>
+
+<div class="diagram"><svg xmlns="http://www.w3.org/2000/svg" width="100%" height="auto" preserveAspectRatio="xMidYMid meet" viewBox="0 0 760 620" role="img" aria-label="Part 2 sharded cluster architecture with replica sets and analytics collections">
+  <defs>
+    <style>
+      .title { font: 700 15px 'Liberation Sans', Arial, sans-serif; fill: #14324F; }
+      .cap { font: 400 10px 'Liberation Sans', Arial, sans-serif; fill: #3D4A57; }
+      .h { font: 700 11px 'Liberation Sans', Arial, sans-serif; fill: #FFFFFF; }
+      .h2 { font: 700 11px 'Liberation Sans', Arial, sans-serif; fill: #14324F; }
+      .t { font: 400 10px 'Liberation Sans', Arial, sans-serif; fill: #1A2430; }
+      .tm { font: 400 9.5px 'DejaVu Sans Mono', 'Liberation Mono', monospace; fill: #1A2430; }
+      .s { font: 600 9px 'Liberation Sans', Arial, sans-serif; fill: #FFFFFF; }
+      .lbl { font: 600 9.5px 'Liberation Sans', Arial, sans-serif; fill: #1B4F72; }
+      .muted { font: 400 9px 'Liberation Sans', Arial, sans-serif; fill: #5B6773; }
+    </style>
+    <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#1B4F72"/>
+    </marker>
+    <marker id="arrowG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#3D6B1E"/>
+    </marker>
+  </defs>
+  <rect width="760" height="620" fill="#F6F8FB"/>
+  <text x="24" y="24" class="title">Part 2 — Refactored cluster: sharding, replication, pre-aggregation</text>
+  <text x="24" y="42" class="cap">Operational writes go to primaries with majority write concern. Analytics read pre-aggregated collections from secondaries (eventual consistency).</text>
+
+  <!-- Clients -->
+  <rect x="250" y="54" width="260" height="32" rx="4" fill="#14324F"/>
+  <text x="380" y="75" class="h" text-anchor="middle">Clients / application drivers</text>
+
+  <line x1="380" y1="86" x2="380" y2="104" stroke="#1B4F72" stroke-width="1.4" marker-end="url(#arrow2)"/>
+
+  <!-- mongos -->
+  <rect x="175" y="106" width="410" height="36" rx="4" fill="#1B4F72"/>
+  <text x="380" y="123" class="h" text-anchor="middle">mongos  (query routers)</text>
+  <text x="380" y="136" class="s" text-anchor="middle" fill="#D6E4F0">scatter-gather only when the shard key is not in the query</text>
+
+  <!-- lines down to shards and config -->
+  <line x1="380" y1="142" x2="380" y2="158" stroke="#1B4F72" stroke-width="1.4"/>
+  <line x1="130" y1="158" x2="630" y2="158" stroke="#1B4F72" stroke-width="1.4"/>
+  <line x1="130" y1="158" x2="130" y2="174" stroke="#1B4F72" stroke-width="1.4" marker-end="url(#arrow2)"/>
+  <line x1="380" y1="158" x2="380" y2="174" stroke="#1B4F72" stroke-width="1.4" marker-end="url(#arrow2)"/>
+  <line x1="630" y1="158" x2="630" y2="174" stroke="#1B4F72" stroke-width="1.4" marker-end="url(#arrow2)"/>
+
+  <!-- Shard 0 -->
+  <g>
+    <rect x="24" y="176" width="212" height="228" rx="5" fill="#FFFFFF" stroke="#1B4F72" stroke-width="1.3"/>
+    <rect x="24" y="176" width="212" height="26" rx="5" fill="#0F5C5C"/>
+    <rect x="24" y="192" width="212" height="10" fill="#0F5C5C"/>
+    <text x="130" y="194" class="h" text-anchor="middle">Shard 0  ·  replica set</text>
+    <!-- Primary -->
+    <rect x="38" y="214" width="184" height="28" rx="3" fill="#14324F"/>
+    <text x="130" y="232" class="h" text-anchor="middle">PRIMARY  (writes)</text>
+    <!-- Secondaries -->
+    <rect x="38" y="248" width="184" height="24" rx="3" fill="#4A6F8A"/>
+    <text x="130" y="264" class="h" text-anchor="middle">SECONDARY</text>
+    <rect x="38" y="276" width="184" height="24" rx="3" fill="#4A6F8A"/>
+    <text x="130" y="292" class="h" text-anchor="middle">SECONDARY  (analytics reads)</text>
+    <text x="38" y="318" class="tm">orders     shard key: hashed userId</text>
+    <text x="38" y="334" class="tm">products   shard key: hashed _id</text>
+    <text x="38" y="354" class="t">3-node RS (P + 2 S)</text>
+    <text x="38" y="370" class="t">Optional: multi-region S</text>
+    <text x="38" y="386" class="muted">Automatic failover if primary is lost</text>
+  </g>
+
+  <!-- Shard 1 -->
+  <g>
+    <rect x="274" y="176" width="212" height="228" rx="5" fill="#FFFFFF" stroke="#1B4F72" stroke-width="1.3"/>
+    <rect x="274" y="176" width="212" height="26" rx="5" fill="#0F5C5C"/>
+    <rect x="274" y="192" width="212" height="10" fill="#0F5C5C"/>
+    <text x="380" y="194" class="h" text-anchor="middle">Shard 1  ·  replica set</text>
+    <rect x="288" y="214" width="184" height="28" rx="3" fill="#14324F"/>
+    <text x="380" y="232" class="h" text-anchor="middle">PRIMARY  (writes)</text>
+    <rect x="288" y="248" width="184" height="24" rx="3" fill="#4A6F8A"/>
+    <text x="380" y="264" class="h" text-anchor="middle">SECONDARY</text>
+    <rect x="288" y="276" width="184" height="24" rx="3" fill="#4A6F8A"/>
+    <text x="380" y="292" class="h" text-anchor="middle">SECONDARY  (analytics reads)</text>
+    <text x="288" y="318" class="tm">orders     shard key: hashed userId</text>
+    <text x="288" y="334" class="tm">products   shard key: hashed _id</text>
+    <text x="288" y="354" class="t">Same replica-set pattern</text>
+    <text x="288" y="370" class="t">Add shards as TPS grows</text>
+    <text x="288" y="386" class="muted">userId hash keeps a user’s orders local</text>
+  </g>
+
+  <!-- Config RS -->
+  <g>
+    <rect x="524" y="176" width="212" height="228" rx="5" fill="#FFFFFF" stroke="#5A6570" stroke-width="1.3"/>
+    <rect x="524" y="176" width="212" height="26" rx="5" fill="#5A6570"/>
+    <rect x="524" y="192" width="212" height="10" fill="#5A6570"/>
+    <text x="630" y="194" class="h" text-anchor="middle">Config servers  ·  CSRS</text>
+    <rect x="538" y="214" width="184" height="28" rx="3" fill="#5A6570"/>
+    <text x="630" y="232" class="h" text-anchor="middle">PRIMARY</text>
+    <rect x="538" y="248" width="184" height="24" rx="3" fill="#8A93A0"/>
+    <text x="630" y="264" class="h" text-anchor="middle">SECONDARY</text>
+    <rect x="538" y="276" width="184" height="24" rx="3" fill="#8A93A0"/>
+    <text x="630" y="292" class="h" text-anchor="middle">SECONDARY</text>
+    <text x="538" y="318" class="t">Stores cluster metadata</text>
+    <text x="538" y="334" class="t">and chunk distribution.</text>
+    <text x="538" y="354" class="t">Not used for application data.</text>
+    <text x="538" y="386" class="muted">Required for a sharded cluster</text>
+  </g>
+
+  <!-- Change streams arrow -->
+  <line x1="380" y1="404" x2="380" y2="428" stroke="#3D6B1E" stroke-width="1.5" marker-end="url(#arrowG)"/>
+  <text x="392" y="422" class="lbl">change streams / aggregation pipelines</text>
+
+  <!-- Analytics layer -->
+  <rect x="24" y="432" width="712" height="168" rx="5" fill="#FFFFFF" stroke="#3D6B1E" stroke-width="1.3"/>
+  <rect x="24" y="432" width="712" height="26" rx="5" fill="#3D6B1E"/>
+  <rect x="24" y="448" width="712" height="10" fill="#3D6B1E"/>
+  <text x="380" y="450" class="h" text-anchor="middle">Analytics layer  ·  denormalized, pre-aggregated collections</text>
+
+  <!-- daily_sales -->
+  <rect x="40" y="470" width="330" height="114" rx="4" fill="#F3F8EE" stroke="#C3D6B0"/>
+  <text x="52" y="490" class="h2">daily_sales</text>
+  <text x="52" y="508" class="tm">_id: { date, productId }</text>
+  <text x="52" y="524" class="tm">unitsSold, revenue, orderCount</text>
+  <text x="52" y="540" class="tm">idx: { date: 1 }   { productId: 1, date: -1 }</text>
+  <text x="52" y="568" class="t">Trend and sales queries by day / product</text>
+
+  <!-- product_stats -->
+  <rect x="390" y="470" width="330" height="114" rx="4" fill="#F3F8EE" stroke="#C3D6B0"/>
+  <text x="402" y="490" class="h2">product_stats</text>
+  <text x="402" y="508" class="tm">_id: productId</text>
+  <text x="402" y="524" class="tm">views, unitsSold, revenue, rating</text>
+  <text x="402" y="540" class="tm">updatedAt    idx: { unitsSold: -1 }</text>
+  <text x="402" y="568" class="t">Leaderboards and catalog badges (eventual)</text>
+</svg></div>
+</div>
+
+<h3>Pre-aggregated sample documents</h3>
+<div class="docs">
+  <div class="doc green">
+    <h4>daily_sales</h4>
+    <pre>{
+  "_id": {
+    "date": "2026-11-15",
+    "productId": "p_shoe001"
+  },
+  "unitsSold": 86,
+  "revenue": 3870000,
+  "orderCount": 79,
+  "currency": "XOF"
+}</pre>
+  </div>
+  <div class="doc green">
+    <h4>product_stats</h4>
+    <pre>{
+  "_id": "p_shoe001",
+  "views": 15240,
+  "unitsSold": 1287,
+  "revenue": 57915000,
+  "rating": 4.5,
+  "updatedAt": "2026-11-15T07:30:00Z"
+}</pre>
+  </div>
+</div>
+
+<h3>Strategies, indexes, and trade-offs</h3>
+<table>
+  <thead>
+    <tr>
+      <th style="width:16%">Strategy</th>
+      <th style="width:48%">How it is applied</th>
+      <th>Trade-off</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Sharding</td>
+      <td>orders: hashed <code>userId</code>; products: hashed <code>_id</code>; scale out by adding shards</td>
+      <td>Higher write throughput; hashed <code>userId</code> can hotspot heavy buyers; a user’s history stays on one shard</td>
+    </tr>
+    <tr>
+      <td>Replication</td>
+      <td>3-node replica set per shard (P + 2 S); optional multi-region secondaries; <code>mongos</code> + config RS</td>
+      <td>High availability and automatic failover; secondaries may lag; partition tolerance via distributed replica sets</td>
+    </tr>
+    <tr>
+      <td>Denormalization</td>
+      <td><code>daily_sales</code> (date + productId) and <code>product_stats</code> (views, unitsSold, revenue, rating), updated asynchronously</td>
+      <td>Fast trend and sales queries; analytics are eventually consistent and slightly stale</td>
+    </tr>
+    <tr>
+      <td>Read preference</td>
+      <td>Primary for checkout and order status; secondary (or a dedicated analytical node) for reports</td>
+      <td>Heavy aggregations do not compete with checkout on the primary</td>
+    </tr>
+    <tr>
+      <td>Indexes (new)</td>
+      <td><code>daily_sales</code>: <code>{ date: 1 }</code>, <code>{ productId: 1, date: -1 }</code><br><code>product_stats</code>: <code>{ unitsSold: -1 }</code>, <code>{ revenue: -1 }</code></td>
+      <td>Day-range totals, per-product trends, and leaderboards without scanning orders</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <strong>CAP trade-off.</strong>
+  Order status stays <em>strongly consistent</em>: single-document atomic updates with <code>writeConcern: "majority"</code> on the primary.
+  The product catalog and the analytics collections may be <em>eventually consistent</em> (secondary reads, asynchronous pre-aggregation).
+  That split keeps checkout correct while giving the system high availability and partition tolerance under growth.
+</div>
+
+<div class="reflection">
+<h2>Short reflection report <span class="wc">(294 words)</span></h2>
+<p>Refactoring the schema while preserving checkout correctness was the hardest part of this exercise. Part 1 relied on single-document atomic updates and majority write concern so that order status could not diverge mid-payment. Introducing shards and replica sets does not remove that need, but it adds new failure modes. A poorly chosen shard key can create hotspots, or turn a frequent query into a scatter-gather operation. I considered hashing on orderId, which balances writes evenly, and hashing on userId, which keeps a customer's orders on one shard for history lookups. I chose a hashed userId for orders, accepting some risk of uneven load from heavy buyers, and a hashed _id for products so catalog traffic is spread evenly. Another challenge was analytics freshness. Pre-aggregated collections such as daily_sales and product_stats cannot be updated in the same atomic write as the order without slowing checkout. Change streams and scheduled aggregation pipelines therefore update those collections asynchronously, so dashboards lag slightly behind live sales.</p>
+<p>The new requirements forced a shift from a single-cluster document design to a distributed architecture. High availability and partition tolerance required a replica set of three nodes on each shard, with the primary taking writes and secondaries providing failover and analytical reads. Large-scale trend queries could not run against the raw orders collection without competing with thousands of transactions per second, so denormalization became essential.</p>
+<p>The refactor improves scalability by spreading data and write load across shards, and availability through automatic failover inside each replica set. Query performance improves because operational traffic still uses targeted indexes, while product-trend and sales reports read compact pre-aggregated documents from secondaries or a dedicated analytical node. The CAP trade-off is explicit: analytics and the product catalog may be eventually consistent, but order status remains strongly consistent.</p>
+</div>
+
+</body>
+</html>

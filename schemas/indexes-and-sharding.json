@@ -1,0 +1,94 @@
+{
+  "part1": {
+    "users": [
+      {
+        "keys": {
+          "email": 1
+        },
+        "options": {
+          "unique": true
+        },
+        "queryPattern": "Look up a user by email for login or account pages."
+      }
+    ],
+    "products": [
+      {
+        "keys": "text(name, description, tags)",
+        "queryPattern": "Full-text catalog search."
+      },
+      {
+        "keys": {
+          "category": 1,
+          "price": 1
+        },
+        "queryPattern": "Browse a category and filter or sort by price."
+      },
+      {
+        "keys": {
+          "sku": 1
+        },
+        "options": {
+          "unique": true
+        },
+        "queryPattern": "SKU lookup for inventory and imports."
+      }
+    ],
+    "orders": [
+      {
+        "keys": {
+          "userId": 1,
+          "createdAt": -1
+        },
+        "queryPattern": "Customer order history, newest first."
+      },
+      {
+        "keys": {
+          "status": 1,
+          "createdAt": -1
+        },
+        "queryPattern": "Operations view of orders by delivery status."
+      }
+    ]
+  },
+  "part2": {
+    "sharding": {
+      "orders": "hashed userId (keeps one customer's orders on one shard; hashed orderId is the alternative if write heat is uneven)",
+      "products": "hashed _id (spreads catalog traffic evenly; category is an alternative if range queries by category must stay targeted)",
+      "daily_sales": "hashed _id or ranged date, depending on whether analytics queries are mostly by day or by product",
+      "product_stats": "hashed _id (productId)"
+    },
+    "replication": "Replica set of 3 nodes per shard (primary + 2 secondaries). Optional multi-region secondaries. readPreference primary for checkout and order status; secondary for analytics.",
+    "writeConcern": "majority for order-status updates (strong consistency). Analytics upserts may use a lower concern.",
+    "indexes": {
+      "daily_sales": [
+        {
+          "keys": {
+            "date": 1
+          },
+          "queryPattern": "Sales totals for a given day or date range."
+        },
+        {
+          "keys": {
+            "productId": 1,
+            "date": -1
+          },
+          "queryPattern": "One product's sales trend over time."
+        }
+      ],
+      "product_stats": [
+        {
+          "keys": {
+            "unitsSold": -1
+          },
+          "queryPattern": "Best-seller leaderboards."
+        },
+        {
+          "keys": {
+            "revenue": -1
+          },
+          "queryPattern": "Highest-revenue products."
+        }
+      ]
+    }
+  }
+}

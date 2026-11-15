@@ -1,0 +1,20 @@
+{
+  "_id": "p_shoe001",
+  "sku": "SHOE-001",
+  "name": "Running Sneakers",
+  "description": "Lightweight road-running shoes",
+  "category": "footwear",
+  "tags": [
+    "running",
+    "sport",
+    "unisex"
+  ],
+  "price": 45000,
+  "currency": "XOF",
+  "stock": 120,
+  "rating": 4.5,
+  "images": [
+    "https://cdn.example.com/shoe-001.jpg"
+  ],
+  "createdAt": "2026-10-15T08:00:00Z"
+}
